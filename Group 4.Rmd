@@ -1,0 +1,409 @@
+---
+title: "Group 4"
+output: html_notebook
+---
+
+# Group 4 Assignment
+
+**Members:** Mammino Sabrina, Camilla De Marco, Serena Suanno
+
+Before diving into the exercises assigned we will import all the libraries in one single cell block
+
+## Libraries import
+
+```{r, message = FALSE}
+
+library(readxl)     # File Reading
+library(dplyr)      # Data manipulation
+library(corrplot)   # Correlation Matrix
+
+
+```
+
+## Task 1 - Exploratory Data Analysis
+
+Considering how non we have all the libraries required we will start with the first part of the Assignment which generally consist in the loading of the dataset and a very short EDA.
+
+### Point 1:
+
+> Report your group number and the id of the first three rows of your sample. Then **exclude** `lat`, `long`, `zipcode` and `id` from the dataset and **create** the variable `age` (age of the house in 2015).
+
+#### 1.1 Dataset Loading
+
+```{r}
+data_or <- read_xlsx("C:/Users/sabri/Desktop/Magistrale/Statistica/lavoro di gruppo/house_data.xlsx")
+group <- 4 
+set.seed(group)
+sample_df <- data_or[sample(nrow(data_or), 2000), ]
+```
+
+#### 1.2 Initial Look
+
+```{r}
+head(sample_df[1:3, ])
+```
+
+```{r}
+str(sample_df)
+```
+
+Our dataset has 2000 and 21 column initially, with all numerical column with the exception of `date` that has a date-time class
+
+> Even though it was not required by the exercise we found it useful to have the description of the features (type) and the dimension of the dataset also in the notebook and not only in the assignment document.
+
+#### 1.3 Exclusion of: `lat`, `long`, `zipcode`, and `id`
+
+```{r}
+data = sample_df %>% select(-c(lat, long, zipcode, id))
+head(data[1:3, ])
+```
+
+#### 1.4 Creation of the new variable `age_of_the_house_in_2015`
+
+In order to create `age`, based on the datasets attributes we computed it manually based on `yr_built`
+
+```{r}
+data$age = 2015 - data$yr_built
+head(data[0:3, c("yr_built", "age")])
+```
+
+```{r}
+dim(data)
+```
+
+From 21 column as expected we are now dealing with 18 columns
+
+## Point 2:
+
+> Describe the **distribution** of `price` and of `log(price)` using the **descriptive statistics** you find appropriate. Comment the results you obtain.
+
+### 2.1 Price Distribution
+
+```{r}
+hist(data$price, col = "lightblue", breaks = 75, main = "Histogram of Price",
+     xlab = "Price")
+```
+
+By looking at the graph it seems that there are **extreme outliers** on the right.
+
+Before continuing with the task of displaying the log graph we will briefly look at the descriptive statistics of `price`, Both from a numerical standpoint and a graphical (we though boxplot would be the best visualization aid)
+
+```{r}
+summary(data$price)
+```
+
+By looking at the graph we notice 2 things:
+
+- MIN-MAX RANGE is equal of almost 4 .5 million usd -
+
+- MEAN \> MEDIAN which means that there are pretty high values that inflate the mean
+
+In order to understand how many outliers exists that inflate the mean we will now use a boxplot
+
+```{r}
+boxplot(data$price, col = "lightblue", horizontal = TRUE,
+        main = "Boxplot of Price", xlab = "Price")
+```
+
+It is pretty clear that there are many many outliers especially near the third qualntile. It migh be interesting to see wether they have a logical/historical sense
+
+### 2.2 Logaritimc distribution of price
+
+By using a log transformation, we squeeze the larger values more than the smaller ones. Since price has a heavy right tail and a fairly short left tail, we will probably see a roughly symmetric distribution
+
+```{r}
+hist(log(data$price), col = "lightblue", breaks = 75, main = "Histogram of Price",
+     xlab = "Price")
+```
+
+We just proved what we've just said.
+
+### 2.3 Comparison of `price` and `log(price)` Boxplots
+
+It might be interesting to compare this `log(price)` boxplot with the `price` one
+
+```{r}
+par(mfrow = c(1, 2))   # 1 row, 2 plots
+
+boxplot(data$price, col = "lightblue", main = "Price", ylab = "Price")
+boxplot(log(data$price), col = "lightgreen", main = "Log(Price)", ylab = "Log(Price)")
+
+par(mfrow = c(1, 1))   # reset layout
+```
+
+After the logarimic transformation we notice a clearer quartile range, even the median now lies near its center, showing a much more symmetric distribution. As said before for the nature of the log, we partially pulled in the right tail, but streched the left one.So now the very cheap houses will appear as outliers.
+
+Based on the Group Asignment task we will keep the original price for descriptive comparisons; but we'll consider the log transformation later when checking the model assumptions.
+
+## Part 3
+
+> Describe (possibly, with plots) the **relationship** between price and some numerical variables you find more interesting (at least 3), and comment on the most relevant and **meaningful correlations** you find in the data
+
+### 3.0 Chain of thought for the choice of relationship to show
+
+In order to choose the variables to compare with price, we believed it might be a good idea to compute the correlation matrix, as it might come in hand with the next steps.
+
+### 3.1 Pearson Correlation Matrix
+
+As we have 21 features i will plot the corr. matrix of the 10 most correlated features
+
+```{r}
+quant_cols = which(sapply(data, is.numeric))
+cor_matrix = cor(data[, quant_cols])      
+
+top10 = names(sort(abs(cor_matrix[, "price"]), decreasing = TRUE))[2:11]
+cor_top = cor_matrix[c("price", top10), c("price", top10)]
+
+corrplot(cor_top, method = "color", type = "lower",     # type è per decidere se mostarre il triangolo di sopra o sotto
+         addCoef.col = "black", number.cex = 0.7,
+         tl.col = "black", tl.cex = 0.8, diag = FALSE)
+
+```
+
+Based on this matrix we will look at the relationship beetween `price` and:
+
+- `sqt_living`: {living area}
+
+- `grade`: {construction quality according to the county (1–13)}
+
+- `sqft15`: {average areas of the 15 nearest houses} aka {the quality of the area}
+
+> Although `sqft_above` is the third most correlated variable with price, we chose `sqft_living15` instead. Their correlations with price are almost identical (0.61 vs 0.59), but `sqft_above` is highly correlated with `sqft_living` (0.88, as it is part of the living area), so it adds little new information. `sqft_living15` is less correlated with it (0.76) and captures a different aspect: the size of the neighbouring houses.
+
+### 3.2 Relationship Display
+
+#### `Price`- `sqft_living`
+
+```{r}
+# sqft_living
+plot(data$sqft_living, data$price, pch = 16, cex = 0.5, col = rgb(0, 0, 1, 0.3),
+     xlab = "sqft_living", ylab = "Price", main = "Price vs sqft_living")
+abline(lm(price ~ sqft_living, data = data), col = "red", lwd = 2)
+
+# design choice: 
+# cex = 0.5 because if i put 1 then the circles would have covered each other even more as we dealing with many data paoints
+# I used rgb as i wanted to insert opacity
+```
+
+By looking at this plot the general idea we can take with us is that price and square foot area have a **positive linear relationship**. As the living square foots increase, price follows.
+
+However, one thing to notice is that as \`sqft_living\` increases the spread of price grows with size: small huses have very similar prices, while large houses vary much more wich might be a signal for **heteroschedasticity**
+
+#### `Price`-`grade`
+
+```{r}
+# grade
+boxplot(price ~ grade, data = data, col = "lightblue",
+        xlab = "grade", ylab = "Price", main = "Price by grade")
+```
+
+By looking at this graph, we can notice how
+
+- The median price grows positively proportionally with grade (as suggested by the corr.matrix)
+
+- The increase of price is not linear: from grade 3 to 7 prices barely change, while from grade 9 upwards they rise much faster
+
+- The spread of prices grows disproportionately with grade, as shown by the increasing interquartile ranges. This supports our earlier observation of heteroscedasticity.
+
+#### `Price`-`sqft_living15`
+
+```{r}
+# sqft_living15
+plot(data$sqft_living15, data$price, pch = 16, cex = 0.5, col = rgb(0, 0, 1, 0.3),
+     xlab = "sqft_living15", ylab = "Price", main = "Price vs sqft_living15")
+abline(lm(price ~ sqft_living15, data = data), col = "red", lwd = 2)
+```
+
+We have a very similar situation to the one we had with sqft_living. So a positive correlation, almost linear with a price range spread that grows with the sqft_living 15 (heteroschedasticity again)
+
+> Commento che ha scritto claude (non da cancellare ma da rivedere -voglio inviarvi il prima possibile il notebook. lo riguardo nel mentre che voi lavorate al resto.
+>
+> The pattern is very similar to the one with sqft_living: a positive, almost linear relationship (r = 0.59), with a spread of prices that grows with sqft_living15 (heteroscedasticity again). The relationship is weaker, as the points are more scattered around the line. This suggests that the size of the neighbouring houses, a proxy for the quality of the area, is linked to price. However, since sqft_living15 is strongly correlated with sqft_living (r = 0.76), part of this relationship may simply reflect that large houses tend to be located near other large houses
+
+## Part 4
+
+> Use a proper plot to compare price across the levels of waterfront and view. Comment
+
+### 4 Plotting of `waterfront` and `view` with boxplots
+
+Boxplots are the best choice to compare these 2 variables as they represent categorical values.
+
+```{r}
+par(mfrow = c(1, 2))
+
+boxplot(price ~ waterfront, data = data, log = "y",
+        col = c("lightgrey", "lightblue"), names = c("No", "Yes"),
+        xlab = "Waterfront", ylab = "Price (log scale)", main = "Price by waterfront")
+
+boxplot(price ~ view, data = data, log = "y",
+        col = hcl.colors(5, "Blues", rev = TRUE),
+        xlab = "View quality (0–4)", ylab = "Price (log scale)", main = "Price by view")
+
+par(mfrow = c(1, 1))
+```
+
+> We used a log scale as groups differ greatly in price level, if we used the original distribution it would have been hard to compare the boxes.
+
+By looking at these 2 graphs we can say that:
+
+- Waterfront houses are far more expensive: the interquartile boxes doesn't even overlap.
+
+- Price also increases with view quality, but not evenly
+
+- Both plots shows many outliers, especially among non-waterfront houses and houses with view 0. Which is strange as their high price would have led us to believe that they would have had either a nice view or a water source near the house.
+
+  > As asked by **Point 5** we will try to see wether these high prices can be explaine dby other characteristics such as size `sqrt`) and `grade` which are the variables we analyzed before.
+
+### 5 Cleaning process
+
+> Are there values that look implausible? If any, decide how to handle them and justify your choice.
+
+This represent our last cleaning step.
+
+#### 5.1 Missing Values
+
+```{r}
+colSums(is.na(data))
+```
+
+We have no missing values which is extremely good
+
+#### 5.2 Range check
+
+In order to see if there are strange values (like negative age) we use `summaries` and focus on the min max values so that we can try to understand the strange values. Some examples might be:
+
+- Age \< 0 ; bathroom \< 0, bedroom \< 0,
+
+- `sqft_living = sqft_above + sqft_basement`
+
+- renovated before built?
+
+- check wether `view` / `waterfront` / `condition` / `grade`stay within their stated ranges (0–4, 0/1, 1–5, 1–13).
+
+> to see them better than with the normal describe() I asked Claude to tell me a way to display them in a nicer way. he suggested knitr
+
+```{r}
+library(knitr)
+
+num <- data[, sapply(data, is.numeric)]
+stats <- t(sapply(num, function(x) c(
+  Min = min(x), Q1 = quantile(x, 0.25), Median = median(x),
+  Mean = mean(x), Q3 = quantile(x, 0.75), Max = max(x))))
+colnames(stats) <- c("Min", "Q1", "Median", "Mean", "Q3", "Max")
+
+kable(round(stats, 1), format.args = list(big.mark = ",", scientific = FALSE),
+      caption = "Descriptive statistics of the numerical variables")
+```
+
+By looking at this table we can notice how:
+
+1.  All the categorical variables are withing their ranges;
+2.  There are some values that contain 0 bedrooms and 0 bathrooms =\> needs a check
+
+I will now check wether `sqft_living = sqft_above + sqft_basement` and the unusual value of bedroom and bathroom i found
+
+#### Strange Value check
+
+##### Bathroom and Bedroom = 0
+
+```{r}
+data[data$bedrooms == 0 | data$bathrooms == 0,
+     c("price", "bedrooms", "bathrooms", "sqft_living", "sqft_lot", "floors", "grade","sqft_living15", "yr_built")]
+```
+
+While the second one is certainly a mistake that i will now drop, the first one might be a real property: its low price and old construction are consistent with a house without a bathroom.
+
+However,it is also true that the combination of no bathroom, a grade of 3 which is near the bottom of the scale and a very small living area (670ft\^(2)≈62 m² on a large lot (43377) suggests a cabin rather than a normal house.
+
+Since we believe it is not representative of the housing market we want to model, we remove it.
+
+One important notice is that dropping these 2 observations out of 2,000 hasn't a big impact on the modelling
+
+#### Drop
+
+```{r}
+data <- data[data$bathrooms != 0, ]
+# little check
+nrow(data)  
+```
+
+##### **Living Area = basement area + above area**
+
+```{r}
+sum(data$sqft_living != data$sqft_above + data$sqft_basement) 
+```
+
+So we do not have any data point with a different difference, which is good. It means that it is clean
+
+##### Year Renovation \< Year built
+
+```{r}
+sum(data$yr_renovated > 0 & data$yr_renovated < data$yr_built)  
+# here the greater than 0 for year renovate dis because if the huse has never beign touched after the construction by legend it is = 0
+```
+
+So also here we do not have any issue
+
+##### Throwback to Part 4
+
+We want to check whether the houses without a view or waterfront had other reasons for their high prices, despite lacking these features. Since there are many of them, we only examine the top 10.
+
+```{r}
+top <- data[data$waterfront == 0 & data$view == 0, ]
+top <- top[order(-top$price), c("price", "sqft_living", "grade", "bathrooms")]
+head(top, 10)
+```
+
+The ten most expensive houses without waterfront and with view 0 are all large (2,800–4,800 sq ft) and have a high construction grade (9–12) and many bathrooms. Their high prices are therefore explained by size and quality rather than by view or waterfront,
+
+## Task 2: Linear Regression
+
+### Part 1
+
+> Fit model M1: price \~ sqft_living and model M2: price \~ bedrooms, and plot each fitted regression line on the proper scatter plot. Which of the two models is better? Justify your answer. For the model you choose, interpret the coefficients, their significance, the 95% confidence intervals, the residual standard error (RSE) and the R2
+
+As this assignemnt part is asking us tocomapre the performance of these two modxel, we feel the need to express how the first model will certainly be better than the second one, as the fitting of a linear regression in a categorical variable will have an extremely high probability to have worse performance thatn a continuos variable as sqft living
+
+```{r}
+M1 <- lm(price ~ sqft_living, data = data)
+M2 <- lm(price ~ bedrooms, data = data)
+
+# M1 model
+par(mfrow = c(1, 2))
+plot(data$sqft_living, data$price, pch = 16, cex = 0.5, col = rgb(0, 0, 1, 0.3),
+     xlab = "sqft_living", ylab = "Price", main = "M1: price ~ sqft_living")
+abline(M1, col = "red", lwd = 2)
+
+#M2 model
+plot(data$bedrooms, data$price, pch = 16, cex = 0.5, col = rgb(0, 0, 1, 0.3),
+     xlab = "bedrooms", ylab = "Price", main = "M2: price ~ bedrooms")
+abline(M2, col = "red", lwd = 2)
+par(mfrow = c(1, 1))
+```
+
+As expected M1 performs far better. 
+
+#### Model choice: M1
+
+Considering these results we choose M1 as our model. We will now interpret the coefficients, their significance, the 95% confidence intervals, the residual standard error (RSE) and the R2 as requested
+
+```{r}
+summary(M1)
+confint(M1)
+```
+
+By looking at the summary and coefficient we can say:
+
+- The **intercept** that predicts price at 0 sq ft, does not have any practical meaning. Any house with 0 ft living area cannot be defined as a house
+
+- **β₁** tells us that each extra sq ft adds about 285 USD on average
+
+- The **significance tes**t we made with p values tells us that both coefficients have p \< 0.001. For the slope, p \< 2e-16, so we **reject H₀: β₁ = 0.**
+
+- The **95% CI for β₁:** [272, 298]. It’s narrow and doesn’t contain 0, which confirms the significance.
+
+- **RSE = 270,400 USD:** the typical prediction error is large, so size alone gives only rough predictions.
+
+- **R²:** `sqft_living` alone explains about 48% of the variability of price (R² = 0.48),
+
+- **Residuals** are asymmetric (max +3.25M vs min −884k). The model underestimates very expensive houses which is consistent with the right skew of price.
